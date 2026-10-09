@@ -11,3 +11,7 @@ SFCSL er et tekstsprog til at beskrive sekvensdiagrammer (SFC) med trin (`S1`, `
 - Mermaid-koden kan kopieres ind i et dokument, en wiki eller en pull request.
 
 Åbn filen direkte i en browser. Den henter Mermaid fra cdnjs, så den skal have netadgang.
+
+## SFCSL i Google Sheets
+
+Mappen `google-sheets/` indeholder et Google Apps Script, der læser SFCSL fra ét ark og tegner SFC-diagrammet med celler og kanter i et andet ark. Se [google-sheets/README.md](google-sheets/README.md) for installation.
