@@ -164,23 +164,28 @@ function validate(items) {
 }
 
 // ---------------------------------------------------------------------------
-// Layout: oversætter parserens liste til et gitter af celler med kanter.
-// Hver bane (lane) i diagrammet fylder tre kolonner: L, R og X.
-// Den lodrette forbindelseslinje er højre kant af L. Trin er L+R flettet
-// sammen med en ramme om. Transitioner er en tyk bundkant på L+R med navnet
-// i X. Alternativ forgrening er en enkelt vandret linje, parallel forgrening
-// en dobbelt.
+// Layout i Graph 5-stil: oversætter parserens liste til et gitter af celler
+// med kanter (semigrafik). Hver bane (lane) fylder fem kolonner:
+//
+//   X      A   B | C   D
+//   navn   [ trinramme ]
+//              |          <- lodret linje = højre kant af B
+//   t2        -+-         <- transition = bundkant på B og C
+//
+// Alternativ forgrening er en enkelt vandret linje, parallel forgrening en
+// dobbelt. En gren rykkes så langt til højre, at alt i grenene til venstre
+// for den får plads, også det der ligger længere nede.
 // ---------------------------------------------------------------------------
 
 const FOERSTE_KOLONNE = 2;  // kolonne B
 const FOERSTE_RAEKKE = 3;   // række 3 (række 1 bruges til status)
+const KOLONNER_PR_BANE = 5;
 
 function layoutSFC(items, prio) {
-  const m = { cells: {}, maxRow: 0, maxCol: 0 };
+  const m = { cells: {}, maxRow: 0, maxCol: 0, stepRows: [] };
   let initial = true;
-  const colL = lane => FOERSTE_KOLONNE + lane * 3;
-  const colR = lane => colL(lane) + 1;
-  const colX = lane => colL(lane) + 2;
+  const col = (lane, n) => FOERSTE_KOLONNE + lane * KOLONNER_PR_BANE + n;
+  const X = 0, A = 1, B = 2, C = 3, D = 4;
 
   function cell(r, c) {
     const k = r + ',' + c;
@@ -190,34 +195,39 @@ function layoutSFC(items, prio) {
     return m.cells[k];
   }
   const border = (r, c, side, style) => { cell(r, c).b[side] = style; };
-  const vline = (r, lane) => border(r, colL(lane), 'right', 'SOLID');
+  const vline = (r, lane) => border(r, col(lane, B), 'right', 'SOLID');
 
-  // Vandret linje fra midten af bane a til midten af bane b (a < b).
+  // Vandret linje fra linjen i bane a til linjen i bane b (a < b).
   function hline(r, a, b, side, style) {
     if (a >= b) return;
-    border(r, colR(a), side, style);
-    border(r, colX(a), side, style);
-    for (let l = a + 1; l < b; l++) for (const c of [colL(l), colR(l), colX(l)]) border(r, c, side, style);
-    border(r, colL(b), side, style);
+    for (const n of [C, D]) border(r, col(a, n), side, style);
+    for (let l = a + 1; l < b; l++) for (let n = X; n <= D; n++) border(r, col(l, n), side, style);
+    for (const n of [X, A, B]) border(r, col(b, n), side, style);
   }
 
-  function step(r, lane, name, initial) {
-    const c = cell(r, colL(lane));
-    cell(r, colR(lane));
-    Object.assign(c, { text: name, merge: 2, box: initial ? 'DOUBLE' : 'SOLID', bold: true });
+  function boxText(r, lane, text, extra) {
+    const c = cell(r, col(lane, A));
+    for (let n = B; n <= D; n++) cell(r, col(lane, n));
+    Object.assign(c, { text, merge: 4 }, extra);
+  }
+
+  function step(r, lane, name) {
+    boxText(r, lane, name, { box: initial ? 'DOUBLE' : 'SOLID', bold: true });
+    m.stepRows.push(r);
+    initial = false;
   }
 
   function transition(r, lane, label) {
     vline(r, lane);
-    border(r, colL(lane), 'bottom', 'SOLID_THICK');
-    border(r, colR(lane), 'bottom', 'SOLID_THICK');
-    Object.assign(cell(r, colX(lane)), { text: label, label: true });
+    border(r, col(lane, B), 'bottom', 'SOLID_MEDIUM');
+    border(r, col(lane, C), 'bottom', 'SOLID_MEDIUM');
+    Object.assign(cell(r, col(lane, X)), { text: label, label: true });
   }
 
+  // Hop: pil på linjen og målets navn under.
   function jump(r, lane, target) {
-    const c = cell(r, colL(lane));
-    cell(r, colR(lane));
-    Object.assign(c, { text: '▼ ' + target, merge: 2 });
+    boxText(r, lane, '▼', { arrow: true });
+    boxText(r + 1, lane, target, { target: true });
   }
 
   function width(chain) {
@@ -235,13 +245,12 @@ function layoutSFC(items, prio) {
       const k = it[0];
       if (i > 0 || !first) { vline(row, lane); row++; }
       if (k === 'S') {
-        step(row++, lane, it[1], initial);
-        initial = false;
+        step(row++, lane, it[1]);
       } else if (k === 'T') {
         transition(row++, lane, it[1] + (pr && i === 0 ? ' (' + pr + ')' : ''));
       } else if (k === 'JUMP') {
-        jump(row++, lane, it[1]);
-        return { row, open: false };
+        jump(row, lane, it[1]);
+        return { row: row + 2, open: false };
       } else {
         const style = k === 'ALT' ? 'SOLID' : 'DOUBLE';
         const lanes = [];
@@ -257,7 +266,7 @@ function layoutSFC(items, prio) {
         if (open.length) hline(end, Math.min(lane, ...open), Math.max(...open), 'bottom', style);
         row = end + 1;
         vline(row++, lane);
-        if (k === 'ALT') step(row++, lane, it[2], false);
+        if (k === 'ALT') step(row++, lane, it[2]);
         else transition(row++, lane, it[2]);
       }
     }
@@ -365,13 +374,15 @@ function skrivModel(ark, m) {
   if (ark.getMaxColumns() < m.maxCol + 1) ark.insertColumnsAfter(ark.getMaxColumns(), m.maxCol + 1 - ark.getMaxColumns());
   if (ark.getMaxRows() < m.maxRow + 1) ark.insertRowsAfter(ark.getMaxRows(), m.maxRow + 1 - ark.getMaxRows());
 
+  const BREDDER = [48, 22, 16, 16, 22];  // X, A, B, C, D i hver bane
   ark.setColumnWidth(1, 20);
-  for (let c = FOERSTE_KOLONNE; c <= m.maxCol; c++) ark.setColumnWidth(c, (c - FOERSTE_KOLONNE) % 3 === 2 ? 70 : 28);
-  ark.setRowHeights(FOERSTE_RAEKKE, m.maxRow - FOERSTE_RAEKKE + 1, 22);
+  for (let c = FOERSTE_KOLONNE; c <= m.maxCol; c++) ark.setColumnWidth(c, BREDDER[(c - FOERSTE_KOLONNE) % KOLONNER_PR_BANE]);
+  ark.setRowHeights(FOERSTE_RAEKKE, m.maxRow - FOERSTE_RAEKKE + 1, 16);
+  for (const r of m.stepRows) ark.setRowHeight(r, 30);
 
   const rows = m.maxRow - FOERSTE_RAEKKE + 1, cols = m.maxCol - FOERSTE_KOLONNE + 1;
   const values = Array.from({ length: rows }, () => Array(cols).fill(''));
-  const kanter = {}, trin = [], labels = [];
+  const kanter = {}, trin = [], labels = [], pile = [], maal = [];
   const kant = (key, ref) => (kanter[key] = kanter[key] || []).push(ref);
 
   for (const k in m.cells) {
@@ -384,12 +395,16 @@ function skrivModel(ark, m) {
       if (x.box) kant('box|' + x.box, ref);
     }
     if (x.label) labels.push(a1(x.r, x.c));
+    if (x.arrow) pile.push(a1(x.r, x.c, x.merge));
+    if (x.target) maal.push(a1(x.r, x.c, x.merge));
     for (const side in x.b) kant(side + '|' + x.b[side], a1(x.r, x.c));
   }
 
   ark.getRange(FOERSTE_RAEKKE, FOERSTE_KOLONNE, rows, cols).setValues(values);
   if (trin.length) ark.getRangeList(trin).setHorizontalAlignment('center').setVerticalAlignment('middle').setFontWeight('bold');
-  if (labels.length) ark.getRangeList(labels).setHorizontalAlignment('left').setVerticalAlignment('bottom').setFontSize(9);
+  if (labels.length) ark.getRangeList(labels).setHorizontalAlignment('right').setVerticalAlignment('bottom').setFontSize(9);
+  if (pile.length) ark.getRangeList(pile).setFontWeight('normal').setVerticalAlignment('bottom');
+  if (maal.length) ark.getRangeList(maal).setFontWeight('normal').setVerticalAlignment('top');
 
   for (const key in kanter) {
     const [side, style] = key.split('|');

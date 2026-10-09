@@ -4,16 +4,18 @@
 
 ![Eksempel på tegnede SFC-diagrammer](eksempel.png)
 
-Diagrammet tegnes sådan:
+Diagrammet tegnes med semigrafik i samme stil som Simatic S7-Graph 5:
 
 | SFC-element | Tegnes som |
 |---|---|
 | Starttrin | Firkant med dobbelt ramme |
 | Trin | Firkant |
-| Transition | Tyk vandret streg med navnet til højre |
+| Transition | Kort vandret streg på linjen, navnet i en fast søjle til venstre |
 | Alternativ forgrening `( … )` | Enkelt vandret linje, med prioritet (1), (2) … |
 | Parallel forgrening `[ … ]` | Dobbelt vandret linje |
-| Hop `>> S2` | ▼ S2 |
+| Hop `>> S2` | ▼ med trinnavnet under |
+
+Grenene står i faste søjler. En gren rykkes så langt til højre, at alt i grenene til venstre for den får plads, også det der ligger længere nede.
 
 ## Installation (én gang)
 
@@ -54,5 +56,5 @@ Sæt `TEGN_AUTOMATISK = false`, hvis det bliver langsomt ved store programmer. S
 ## Opbygning af koden
 
 1. **Tokenizer, parser og validering**: præcis den samme kode som i `sfcsl-mermaid-editor.html`.
-2. **`layoutSFC`**: regner ud, hvilke celler der skal have tekst og kanter. Hver gren i diagrammet fylder tre kolonner: to til trinnet og én til transitionsnavnet. Den lodrette linje er højre kant af den første kolonne.
+2. **`layoutSFC`**: regner ud, hvilke celler der skal have tekst og kanter. Hver gren i diagrammet fylder fem kolonner: én til transitionsnavnet og fire til trinnet. Den lodrette linje er kanten mellem de to midterste kolonner, og transitionen er en bundkant på netop de to.
 3. **`tegnSFC` og `skrivModel`**: læser arket, kalder parseren og skriver resultatet ind i arket med så få kald som muligt, fordi Apps Script er langsomt, når man ændrer én celle ad gangen.
